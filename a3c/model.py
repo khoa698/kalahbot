@@ -1,96 +1,62 @@
-import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.rnn as rnn
-import distutils.version
-use_tf100_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('1.0.0')
+import numpy as np
 
-def normalized_columns_initializer(std=1.0):
-    def _initializer(shape, dtype=None, partition_info=None):
-        out = np.random.randn(*shape).astype(np.float32)
-        out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
-        return tf.constant(out)
-    return _initializer
 
-def flatten(x):
-    return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
+class ACNetwork(object):
+    def __init__(self, state_shape: [int], num_act: int):
+        w_init = tf.contrib.layers.xavier_initializer()
 
-def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float32, collections=None):
-    with tf.variable_scope(name):
-        stride_shape = [1, stride[0], stride[1], 1]
-        filter_shape = [filter_size[0], filter_size[1], int(x.get_shape()[3]), num_filters]
+        # Base network
+        self.state = tf.placeholder(tf.float32, shape=[None] + state_shape)
+        self.mask = tf.placeholder(tf.float32, shape=[None, num_act])
+        inverse_mask = tf.ones_like(self.mask) - self.mask
 
-        # there are "num input feature maps * filter height * filter width"
-        # inputs to each hidden unit
-        fan_in = np.prod(filter_shape[:3])
-        # each unit in the lower layer receives a gradient from:
-        # "num output feature maps * filter height * filter width" /
-        #   pooling size
-        fan_out = np.prod(filter_shape[:2]) * num_filters
-        # initialize weights with random weights
-        w_bound = np.sqrt(6. / (fan_in + fan_out))
+        flattened_imp = tf.contrib.layers.flatten(self.state)
+        net_h1 = tf.layers.dense(inputs=flattened_imp, units=20, activation=tf.nn.relu, kernel_initializer=w_init)
+        net_h2 = tf.layers.dense(inputs=net_h1, units=20, activation=tf.nn.relu, kernel_initializer=w_init)
+        net_h3 = tf.layers.dense(inputs=net_h2, units=10, activation=tf.nn.relu, kernel_initializer=w_init)
 
-        w = tf.get_variable("W", filter_shape, dtype, tf.random_uniform_initializer(-w_bound, w_bound),
-                            collections=collections)
-        b = tf.get_variable("b", [1, 1, 1, num_filters], initializer=tf.constant_initializer(0.0),
-                            collections=collections)
-        return tf.nn.conv2d(x, w, stride_shape, pad) + b
+        # Policy network
+        self.logits = tf.layers.dense(net_h3, num_act, activation=None,
+                                      kernel_initializer=self.normalized_columns_initializer(std=0.01))
+        # Zero the probabilities of invalid actions
+        self.logits = self.logits * self.mask - inverse_mask * 1e35
 
-def linear(x, size, name, initializer=None, bias_init=0):
-    w = tf.get_variable(name + "/w", [x.get_shape()[1], size], initializer=initializer)
-    b = tf.get_variable(name + "/b", [size], initializer=tf.constant_initializer(bias_init))
-    return tf.matmul(x, w) + b
+        # Value network
+        self.value = tf.layers.dense(net_h3, 1, activation=None,
+                                     kernel_initializer=self.normalized_columns_initializer(1.0))
 
-def categorical_sample(logits, d):
-    value = tf.squeeze(tf.multinomial(logits - tf.reduce_max(logits, [1], keep_dims=True), 1), [1])
-    return tf.one_hot(value, d)
+        # The variables of this network
+        self.vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, tf.get_variable_scope().name)
 
-class LSTMPolicy(object):
-    def __init__(self, ob_space, ac_space):
-        self.x = x = tf.placeholder(tf.float32, [None] + list(ob_space))
+    def sample(self, state: np.array, mask: np.array) -> (int, int):
+        """Renormalises the logits by taking into account only the valid actions and generates a sample"""
+        dist, logits, value = self.evaluate_move(mask, state)
 
-        for i in range(4):
-            x = tf.nn.elu(conv2d(x, 32, "l{}".format(i + 1), [3, 3], [2, 2]))
-        # introduce a "fake" batch dimension of 1 after flatten so that we can do LSTM over time dim
-        x = tf.expand_dims(flatten(x), [0])
+        return np.random.choice(range(logits.size), p=dist), value[0][0]
 
-        size = 256
-        if use_tf100_api:
-            lstm = rnn.BasicLSTMCell(size, state_is_tuple=True)
-        else:
-            lstm = rnn.rnn_cell.BasicLSTMCell(size, state_is_tuple=True)
-        self.state_size = lstm.state_size
-        step_size = tf.shape(self.x)[:1]
-
-        c_init = np.zeros((1, lstm.state_size.c), np.float32)
-        h_init = np.zeros((1, lstm.state_size.h), np.float32)
-        self.state_init = [c_init, h_init]
-        c_in = tf.placeholder(tf.float32, [1, lstm.state_size.c])
-        h_in = tf.placeholder(tf.float32, [1, lstm.state_size.h])
-        self.state_in = [c_in, h_in]
-
-        if use_tf100_api:
-            state_in = rnn.LSTMStateTuple(c_in, h_in)
-        else:
-            state_in = rnn.rnn_cell.LSTMStateTuple(c_in, h_in)
-        lstm_outputs, lstm_state = tf.nn.dynamic_rnn(
-            lstm, x, initial_state=state_in, sequence_length=step_size,
-            time_major=False)
-        lstm_c, lstm_h = lstm_state
-        x = tf.reshape(lstm_outputs, [-1, size])
-        self.logits = linear(x, ac_space, "action", normalized_columns_initializer(0.01))
-        self.vf = tf.reshape(linear(x, 1, "value", normalized_columns_initializer(1.0)), [-1])
-        self.state_out = [lstm_c[:1, :], lstm_h[:1, :]]
-        self.sample = categorical_sample(self.logits, ac_space)[0, :]
-        self.var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, tf.get_variable_scope().name)
-
-    def get_initial_features(self):
-        return self.state_init
-
-    def act(self, ob, c, h):
+    def evaluate_move(self, mask, state):
         sess = tf.get_default_session()
-        return sess.run([self.sample, self.vf] + self.state_out,
-                        {self.x: [ob], self.state_in[0]: c, self.state_in[1]: h})
+        feed_dict = {
+            self.state: [state],
+            self.mask: [mask],
+        }
+        logits, value = sess.run([self.logits, self.value], feed_dict)
+        # Sampling is done in numpy because it has higher precision and it is less likely to have numerical problems
+        logits = np.asarray(logits, dtype=np.float64).flatten()
+        # The max logit is subtracted for numerical stability. This uses the property softmax(x - a) = softmax(x)
+        exp = np.exp(logits - np.max(logits))
+        dist = exp / np.sum(exp)
 
-    def value(self, ob, c, h):
-        sess = tf.get_default_session()
-        return sess.run(self.vf, {self.x: [ob], self.state_in[0]: c, self.state_in[1]: h})[0]
+        if np.sum(exp) == 0:
+            raise ZeroDivisionError('There is no valid action. This should not happen')
+
+        return dist, logits, value
+
+    def normalized_columns_initializer(self, std=1.0):
+        def _initializer(shape, dtype=None, partition_info=None):
+            out = np.random.randn(*shape).astype(np.float32)
+            out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
+            return tf.constant(out)
+
+        return _initializer
