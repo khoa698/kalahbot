@@ -1,11 +1,13 @@
 from __future__ import print_function
+from env.mancala import MancalaEnv
+from env.side import Side
+from env.move import Move
+import random
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-from model import LSTMPolicy
-import six.moves.queue as queue
+from a3c.model import ACNetwork
 import scipy.signal
-import threading
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
 
@@ -13,154 +15,131 @@ use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.L
 def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
-def process_rollout(rollout, gamma, lambda_=1.0):
+
+def generate_training_batch(rollout, gamma: float, bootstrap_value=0.0):
+    """Computes the advantages and prepares the batch for training
+       The bootstrap value is used only for incomplete episodes which is not the case in our case where we always
+       play a full Mancala Game. We can think of the environment's MDP final state as a loop state
+       which always produces a reward of 0. This justifies the default value of 0 which we always use.
     """
-given a rollout, compute its returns and the advantage
-"""
-    batch_si = np.asarray(rollout.states)
-    batch_a = np.asarray(rollout.actions)
+    states = np.asarray(rollout.states)
+    actions = np.asarray(rollout.actions)
     rewards = np.asarray(rollout.rewards)
-    vpred_t = np.asarray(rollout.values + [rollout.r])
+    values = np.asarray(rollout.values)
+    masks = np.asarray(rollout.masks)
 
-    rewards_plus_v = np.asarray(rollout.rewards + [rollout.r])
-    batch_r = discount(rewards_plus_v, gamma)[:-1]
-    delta_t = rewards + gamma * vpred_t[1:] - vpred_t[:-1]
-    # this formula for the advantage comes "Generalized Advantage Estimation":
-    # https://arxiv.org/abs/1506.02438
-    batch_adv = discount(delta_t, gamma * lambda_)
+    # The advantage function is "Generalized Advantage Estimation"
+    # For more details: https://arxiv.org/abs/1506.02438
+    rewards_plus = np.concatenate((rewards.tolist(), [bootstrap_value]))
+    discounted_rewards = discount(rewards_plus[:-1], gamma)
+    value_plus = np.concatenate((values.tolist(), [bootstrap_value]))
+    advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]
+    advantages = discount(advantages, gamma)
 
-    features = rollout.features[0]
-    return Batch(batch_si, batch_a, batch_adv, batch_r, rollout.terminal, features)
-
-
-Batch = namedtuple("Batch", ["si", "a", "adv", "r", "terminal", "features"])
+    return Batch(states, actions, advantages, discounted_rewards, masks)
 
 
-class PartialRollout(object):
-    """
-a piece of a complete rollout.  We run our agent, and process its experience
-once it has processed enough steps.
-"""
+Batch = namedtuple("Batch", ["states", "actions", "advantages", "discounted_rewards", "masks"])
+
+
+class Rollout(object):
     def __init__(self):
         self.states = []
         self.actions = []
         self.rewards = []
         self.values = []
-        self.r = 0.0
-        self.terminal = False
-        self.features = []
+        self.masks = []
+        self.win = 0
 
-    def add(self, state, action, reward, value, terminal, features):
-        self.states += [state]
-        self.actions += [action]
-        self.rewards += [reward]
-        self.values += [value]
-        self.terminal = terminal
-        self.features += [features]
+    def add(self, state: np.array, action: int, reward: int, value: int, mask: [float]):
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.values.append(value)
+        self.masks.append(mask)
 
-    def extend(self, other):
-        assert not self.terminal
-        self.states.extend(other.states)
-        self.actions.extend(other.actions)
-        self.rewards.extend(other.rewards)
-        self.values.extend(other.values)
-        self.r = other.r
-        self.terminal = other.terminal
-        self.features.extend(other.features)
+    def update_last_reward(self, reward):
+        assert len(self.rewards) > 0
+        self.rewards[-1] = reward
+
+    def add_win(self):
+        self.win = 1
 
 
-class RunnerThread(threading.Thread):
+class RunnerThread(object):
     """
 One of the key distinctions between a normal environment and a universe environment
 is that a universe environment is _real time_.  This means that there should be a thread
 that would constantly interact with the environment and tell it what to do.  This thread is here.
 """
-    def __init__(self, env, policy, num_local_steps, visualise):
-        threading.Thread.__init__(self)
-        self.queue = queue.Queue(5)
-        self.num_local_steps = num_local_steps
+
+    def __init__(self, env: MancalaEnv, ac_net: ACNetwork):
         self.env = env
-        self.last_features = None
-        self.policy = policy
-        self.daemon = True
+        self.ac_net = ac_net
         self.sess = None
-        self.summary_writer = None
-        self.visualise = visualise
+        self.opp_agent = None
+        self.trainer_side = None
 
-    def start_runner(self, sess, summary_writer):
+    def run(self, sess: tf.Session, opp_agent: Agent) -> Rollout:
         self.sess = sess
-        self.summary_writer = summary_writer
-        self.start()
-
-    def run(self):
+        self.opp_agent = opp_agent
         with self.sess.as_default():
-            self._run()
+            return self._run()
 
     def _run(self):
-        rollout_provider = env_runner(self.env, self.policy, self.num_local_steps, self.summary_writer, self.visualise)
-        while True:
-            # the timeout variable exists because apparently, if one worker dies, the other workers
-            # won't die with it, unless the timeout is set to some large number.  This is an empirical
-            # observation.
+        # Choose randomly the side to play
+        self.trainer_side = Side.SOUTH if random.randint(0, 1) == 0 else Side.NORTH
+        # Reset the environment so everything is in a clean state.
+        self.env.reset()
 
-            self.queue.put(next(rollout_provider), timeout=600.0)
+        rollout = env_runner(self.env, self.trainer_side, self.ac_net, self.opp_agent)
+
+        return rollout
 
 
 
-def env_runner(env, policy, num_local_steps, summary_writer, render):
+def env_runner(env, trainer_side, ac_net, opp_agent):
     """
 The logic of the thread runner.  In brief, it constantly keeps on running
 the policy, and as long as the rollout exceeds a certain length, the thread
 runner appends the policy to the queue.
 """
-    last_state = env.reset()
-    last_features = policy.get_initial_features()
-    length = 0
-    rewards = 0
+    rollout = Rollout()
 
-    while True:
-        terminal_end = False
-        rollout = PartialRollout()
+    while not env.is_game_over():
+        # There is no choice if only one action is left. Taking that action automatically must be seen as
+        # a characteristic behaviour of the environment. This helped the learning of the agent
+        # to be more numerically stable (this is an empirical observation).
+        if len(env.get_legal_moves()) == 1:
+            action_left_to_perform = env.get_legal_moves()[0]
+            env.perform_move(action_left_to_perform)
+            continue
 
-        for _ in range(num_local_steps):
-            fetched = policy.act(last_state, *last_features)
-            action, value_, features = fetched[0], fetched[1], fetched[2:]
-            # argmax to convert from one-hot
-            state, reward, terminal, info = env.step(action.argmax())
-            if render:
-                env.render()
+        if env.side_to_move == trainer_side:
+            # If the agent is playing as NORTH, it's input would be a flipped board
+            flip_board = env.side_to_move == Side.NORTH
+            state = env.board.get_board_image(flipped=flip_board)
+            mask = env.get_action_mask_with_no_pie()
 
-            # collect the experience
-            rollout.add(last_state, action, reward, value_, terminal, last_features)
-            length += 1
-            rewards += reward
+            action, value = ac_net.sample(state, mask)
+            # Because the pie move with index 0 is ignored, the action indexes must be shifted by one
+            reward = env.perform_move(Move(trainer_side, action + 1))
+            rollout.add(state, action, reward, value, mask)
+        else:
+            assert env.side_to_move == Side.opposite(trainer_side)
+            action = opp_agent.produce_action(env.board.get_board_image(),
+                                                   env.get_action_mask_with_no_pie(),
+                                                   env.side_to_move)
+            env.perform_move(Move(env.side_to_move, action + 1))
 
-            last_state = state
-            last_features = features
+        # We replace the partial reward of the last move with the final reward of the game
+    final_reward = env.compute_final_reward(trainer_side)
+    rollout.update_last_reward(final_reward)
 
-            if info:
-                summary = tf.Summary()
-                for k, v in info.items():
-                    summary.value.add(tag=k, simple_value=float(v))
-                summary_writer.add_summary(summary, policy.global_step.eval())
-                summary_writer.flush()
+    if env.get_winner() == trainer_side:
+        rollout.add_win()
+    return rollout
 
-            timestep_limit = env.spec.tags.get('wrapper_config.TimeLimit.max_episode_steps')
-            if terminal or length >= timestep_limit:
-                terminal_end = True
-                if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
-                    last_state = env.reset()
-                last_features = policy.get_initial_features()
-                print("Episode finished. Sum of rewards: %d. Length: %d" % (rewards, length))
-                length = 0
-                rewards = 0
-                break
-
-        if not terminal_end:
-            rollout.r = policy.value(last_state, *last_features)
-
-        # once we have enough experience, yield it, and have the ThreadRunner place it on a queue
-        yield rollout
 
 class A3C(object):
     def __init__(self, env, task, visualise):
@@ -173,36 +152,59 @@ should be computed.
 
         self.env = env
         self.task = task
+
+        # Performance statistics
+        self.episodes_reward = []
+        self.episodes_length = []
+        self.episodes_mean_value = []
+        self.wins = 0
+        self.games = 0
+
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
-                self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                # self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n) replace Open AI policy
+                self.network = ACNetwork(state_shape=[2, 8, 1], num_act=7)
                 self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
                                                    trainable=False)
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                # self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n) replace Open AI policy
+                self.local_network = pi = self.network
                 pi.global_step = self.global_step
 
-            self.ac = tf.placeholder(tf.float32, [None, env.action_space.n], name="ac")
-            self.adv = tf.placeholder(tf.float32, [None], name="adv")
-            self.r = tf.placeholder(tf.float32, [None], name="r")
+            self.action = tf.placeholder(shape=[None], dtype=tf.int32)
+            self.action_one_hot = tf.one_hot(self.action, 7, dtype=tf.float32)
+            self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
+            self.advantage = tf.placeholder(shape=[None], dtype=tf.float32)
 
             log_prob_tf = tf.nn.log_softmax(pi.logits)
             prob_tf = tf.nn.softmax(pi.logits)
 
-            # the "policy gradients" loss:  its derivative is precisely the policy gradient
-            # notice that self.ac is a placeholder that is provided externally.
-            # adv will contain the advantages, as calculated in process_rollout
-            pi_loss = - tf.reduce_sum(tf.reduce_sum(log_prob_tf * self.ac, [1]) * self.adv)
+
+            act_log_prob = tf.reduce_sum(log_prob * self.action_one_hot, [1])
 
             # loss of value function
-            vf_loss = 0.5 * tf.reduce_sum(tf.square(pi.vf - self.r))
-            entropy = - tf.reduce_sum(prob_tf * log_prob_tf)
+            self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(pi.value, [-1])))
+            self.entropy = -tf.reduce_sum(prob * log_prob)
+            self.policy_loss = -tf.reduce_sum(act_log_prob * self.advantage)
 
-            bs = tf.to_float(tf.shape(pi.x)[0])
-            self.loss = pi_loss + 0.5 * vf_loss - entropy * 0.01
+            self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01
+
+            # Get gradients from local network using local losses and clip them to avoid exploding gradients
+            self.gradients = tf.gradients(self.loss, pi.vars)
+            grads, self.grad_norms = tf.clip_by_global_norm(self.gradients, 100.0)
+
+            # Define operation for downloading the weights from the parameter server (ps)
+            # on the local model of the worker
+            self.down_sync = tf.group(*[v1.assign(v2) for v1, v2 in zip(pi.vars, self.network.vars)])
+
+            # Define the training operation which applies the gradients on the parameter server network (up sync)
+            optimiser = tf.train.RMSPropOptimizer(learning_rate=0.0007)
+            grads_and_global_vars = list(zip(grads, self.network.vars))
+            inc_step = self.global_step.assign_add(tf.shape(self.action)[0])
+            self.train_op = tf.group(*[optimiser.apply_gradients(grads_and_global_vars), inc_step])
 
             # 20 represents the number of "local steps":  the number of timesteps
             # we run the policy before we update the parameters.
@@ -210,71 +212,51 @@ should be computed.
             # on the one hand;  but on the other hand, we get less frequent parameter updates, which
             # slows down learning.  In this code, we found that making local steps be much
             # smaller than 20 makes the algorithm more difficult to tune and to get to work.
-            self.runner = RunnerThread(env, pi, 20, visualise)
+            self.runner = RunnerThread(MancalaEnv(), pi)
 
-
-            grads = tf.gradients(self.loss, pi.var_list)
+            episode_size = tf.to_float(tf.shape(pi.value)[0])
 
             if use_tf12_api:
-                tf.summary.scalar("model/policy_loss", pi_loss / bs)
-                tf.summary.scalar("model/value_loss", vf_loss / bs)
-                tf.summary.scalar("model/entropy", entropy / bs)
-                tf.summary.image("model/state", pi.x)
-                tf.summary.scalar("model/grad_global_norm", tf.global_norm(grads))
-                tf.summary.scalar("model/var_global_norm", tf.global_norm(pi.var_list))
+                tf.summary.scalar("model/policy_loss", self.policy_loss / episode_size)
+                tf.summary.scalar("model/value_loss", self.value_loss / episode_size)
+                tf.summary.scalar("model/entropy", self.entropy / episode_size)
+                tf.summary.scalar("model/grad_global_norm", self.grad_norms)
+                tf.summary.scalar("model/var_global_norm", tf.global_norm(pi.vars))
                 self.summary_op = tf.summary.merge_all()
 
             else:
-                tf.scalar_summary("model/policy_loss", pi_loss / bs)
-                tf.scalar_summary("model/value_loss", vf_loss / bs)
-                tf.scalar_summary("model/entropy", entropy / bs)
-                tf.image_summary("model/state", pi.x)
-                tf.scalar_summary("model/grad_global_norm", tf.global_norm(grads))
-                tf.scalar_summary("model/var_global_norm", tf.global_norm(pi.var_list))
+                tf.scalar_summary("model/policy_loss", self.policy_loss / episode_size)
+                tf.scalar_summary("model/value_loss", self.value_loss / episode_size)
+                tf.scalar_summary("model/entropy", self.entropy / episode_size)
+                tf.scalar_summary("model/grad_global_norm", self.grad_norms)
+                tf.scalar_summary("model/var_global_norm", tf.global_norm(pi.vars))
                 self.summary_op = tf.merge_all_summaries()
 
-            grads, _ = tf.clip_by_global_norm(grads, 40.0)
-
-            # copy weights from the parameter server to the local model
-            self.sync = tf.group(*[v1.assign(v2) for v1, v2 in zip(pi.var_list, self.network.var_list)])
-
-            grads_and_vars = list(zip(grads, self.network.var_list))
-            inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
-
-            # each worker has a different set of adam optimizer parameters
-            opt = tf.train.AdamOptimizer(1e-4)
-            self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
 
-    def start(self, sess, summary_writer):
-        self.runner.start_runner(sess, summary_writer)
+    def play(self, sess: tf.Session, opp_agent: Agent, summary_writer: tf.summary.FileWriter):
         self.summary_writer = summary_writer
+        sess.run(self.down_sync)
+        rollout = self.env_runner.run(sess, opp_agent)
+        self.train(sess, rollout)
 
-    def pull_batch_from_queue(self):
+    def train(self, sess: tf.Session, rollout: Rollout, sum_period=100):
         """
-self explanatory:  take a rollout from the queue of the thread runner.
-"""
-        rollout = self.runner.queue.get(timeout=600.0)
-        while not rollout.terminal:
-            try:
-                rollout.extend(self.runner.queue.get_nowait())
-            except queue.Empty:
-                break
-        return rollout
-
-    def process(self, sess):
-        """
-process grabs a rollout that's been produced by the thread runner,
-and updates the parameters.  The update is then sent to the parameter
-server.
+train grabs a rollout that's been produced by the thread runner,
+and updates the parameters.
 """
 
-        sess.run(self.sync)  # copy weights from shared to local
-        rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, gamma=0.99, lambda_=1.0)
+        # Record the statistics of this new rollout
+        self.episodes_reward.append(np.sum(rollout.rewards))
+        self.episodes_length.append(len(rollout.states))
+        self.episodes_mean_value.append(np.mean(rollout.values))
+        self.wins += rollout.win
+        self.games += 1
 
-        should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
+        batch = generate_training_batch(rollout, gamma=0.99)
+
+        should_compute_summary = self.task == 0 and self.local_steps % sum_period == 0
 
         if should_compute_summary:
             fetches = [self.summary_op, self.train_op, self.global_step]
@@ -282,17 +264,36 @@ server.
             fetches = [self.train_op, self.global_step]
 
         feed_dict = {
-            self.local_network.x: batch.si,
-            self.ac: batch.a,
-            self.adv: batch.adv,
-            self.r: batch.r,
-            self.local_network.state_in[0]: batch.features[0],
-            self.local_network.state_in[1]: batch.features[1],
+            self.local_network.state: batch.states,
+            self.action: batch.actions,
+            self.advantage: batch.advantages,
+            self.target_v: batch.discounted_rewards,
+            self.local_network.mask: batch.masks,
         }
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
 
         if should_compute_summary:
-            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), fetched[-1])
+            # Keep only the last sum_period entries
+            self.episodes_reward = self.episodes_reward[-sum_period:]
+            self.episodes_length = self.episodes_length[-sum_period:]
+            self.episodes_mean_value = self.episodes_mean_value[-sum_period:]
+
+            # Add stats to tensorboard
+            summary = tf.Summary()
+            mean_reward = np.mean(self.episodes_reward[-sum_period:])
+            mean_length = np.mean(self.episodes_length[-sum_period:])
+            mean_value = np.mean(self.episodes_mean_value[-sum_period:])
+            summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
+            summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
+            summary.value.add(tag='Perf/Value', simple_value=float(mean_value))
+            summary.value.add(tag='Perf/WinRate', simple_value=float(self.wins / self.games))
+
+            self.summary_writer.add_summary(summary, fetched[1])
+            self.summary_writer.add_summary(tf.Summary.FromString(fetched[2]), fetched[1])
             self.summary_writer.flush()
+
+            # Restart the win rate statistics
+            self.wins = self.games = 0
+            self.summary_writer = None
         self.local_steps += 1
