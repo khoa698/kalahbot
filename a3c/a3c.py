@@ -7,6 +7,7 @@ from collections import namedtuple
 import numpy as np
 import tensorflow as tf
 from a3c.model import ACNetwork
+from a3c.agent import Agent
 import scipy.signal
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
@@ -182,12 +183,11 @@ should be computed.
             log_prob_tf = tf.nn.log_softmax(pi.logits)
             prob_tf = tf.nn.softmax(pi.logits)
 
-
-            act_log_prob = tf.reduce_sum(log_prob * self.action_one_hot, [1])
+            act_log_prob = tf.reduce_sum(log_prob_tf * self.action_one_hot, [1])
 
             # loss of value function
             self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(pi.value, [-1])))
-            self.entropy = -tf.reduce_sum(prob * log_prob)
+            self.entropy = -tf.reduce_sum(prob_tf * log_prob_tf)
             self.policy_loss = -tf.reduce_sum(act_log_prob * self.advantage)
 
             self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01
