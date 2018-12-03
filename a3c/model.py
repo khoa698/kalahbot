@@ -2,6 +2,15 @@ import tensorflow as tf
 import numpy as np
 
 
+def normalized_columns_initializer(std=1.0):
+    def _initializer(shape, dtype=None, partition_info=None):
+        out = np.random.randn(*shape).astype(np.float32)
+        out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
+        return tf.constant(out)
+
+    return _initializer
+
+
 class ACNetwork(object):
     def __init__(self, state_shape: [int], num_act: int):
         w_init = tf.contrib.layers.xavier_initializer()
@@ -18,13 +27,13 @@ class ACNetwork(object):
 
         # Policy network
         self.logits = tf.layers.dense(net_h3, num_act, activation=None,
-                                      kernel_initializer=self.normalized_columns_initializer(std=0.01))
+                                      kernel_initializer=normalized_columns_initializer(std=0.01))
         # Zero the probabilities of invalid actions
         self.logits = self.logits * self.mask - inverse_mask * 1e35
 
         # Value network
         self.value = tf.layers.dense(net_h3, 1, activation=None,
-                                     kernel_initializer=self.normalized_columns_initializer(1.0))
+                                     kernel_initializer=normalized_columns_initializer(1.0))
 
         # The variables of this network
         self.vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, tf.get_variable_scope().name)
@@ -53,10 +62,3 @@ class ACNetwork(object):
 
         return dist, logits, value
 
-    def normalized_columns_initializer(self, std=1.0):
-        def _initializer(shape, dtype=None, partition_info=None):
-            out = np.random.randn(*shape).astype(np.float32)
-            out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
-            return tf.constant(out)
-
-        return _initializer
