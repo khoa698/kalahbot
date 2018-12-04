@@ -22,8 +22,8 @@ class Board(object):
         holes = original_board.holes
         board = cls(holes, 0)
         for hole in range(1, holes + 1):
-            board.board[Side.get_side(Side.NORTH)][hole] = deepcopy(original_board.board[0][hole])
-            board.board[Side.get_side(Side.SOUTH)][hole] = deepcopy(original_board.board[1][hole])
+            board.board[Side.get_side(Side.NORTH)][hole] = deepcopy(original_board.board[Side.get_side(Side.NORTH)][hole])
+            board.board[Side.get_side(Side.SOUTH)][hole] = deepcopy(original_board.board[Side.get_side(Side.SOUTH)][hole])
         return board
 
     def get_seeds_in_hole(self, side: Side, hole: int)->int:

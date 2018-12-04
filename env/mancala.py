@@ -173,7 +173,7 @@ class MancalaEnv(object):
             for hole in range(1, board.holes + 1):
                 seeds += board.get_seeds_in_hole(collecting_side, hole)
                 board.set_seeds_in_hole(collecting_side, hole, 0)
-            board.add_seeds_in_hole(collecting_side, seeds)
+            board.add_to_store(collecting_side, seeds)
 
         if hole == 0 and (move.side == Side.NORTH or north_moved):
             return move.side
