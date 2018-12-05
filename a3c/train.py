@@ -32,7 +32,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
     # for launching the TF workers and for launching tensorboard
     base_cmd = [
         'CUDA_VISIBLE_DEVICES=',
-        sys.executable, 'worker.py',
+        "/usr/bin/python3", './worker.py',
         '--log-dir', logdir,
         '--num-workers', str(num_workers)]
 
@@ -47,7 +47,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
         cmds_map += [new_cmd(session,
             "w-%d" % i, base_cmd + ["--job-name", "worker", "--task", str(i), "--remotes", remotes[i]], mode, logdir, shell)]
 
-    cmds_map += [new_cmd(session, "tb", ["tensorboard", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
+    cmds_map += [new_cmd(session, "tb", ["python", "/home/simeone/.local/lib/python3.6/site-packages/tensorboard/main.py", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
     if mode == 'tmux':
         cmds_map += [new_cmd(session, "htop", ["htop"], mode, logdir, shell)]
 
@@ -73,7 +73,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
         "kill $( lsof -i:12345 -t ) > /dev/null 2>&1",  # kill any process using tensorboard's port
         "kill $( lsof -i:12222-{} -t ) > /dev/null 2>&1".format(num_workers+12222), # kill any processes using ps / worker ports
         "tmux kill-session -t {}".format(session),
-        "tmux new-session -c `PWD` -s {} -n {} -d {}".format(session, windows[0], shell)
+        "tmux new-session -c `pwd` -s {} -n {} -d {}".format(session, windows[0], shell)
         ]
         for w in windows[1:]:
             cmds += ["tmux new-window -t {} -n {} {}".format(session, w, shell)]

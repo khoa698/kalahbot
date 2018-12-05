@@ -6,8 +6,8 @@ import random
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-from a3c.model import ACNetwork
-from a3c.agent import Agent
+from model import ACNetwork
+from agent import Agent
 import scipy.signal
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
@@ -143,7 +143,7 @@ runner appends the policy to the queue.
 
 
 class A3C(object):
-    def __init__(self, env, task, visualise):
+    def __init__(self, env, task):
         """
 An implementation of the A3C algorithm that is reasonably well-tuned for the VNC environments.
 Below, we will have a modest amount of complexity due to the way TensorFlow handles data parallelism.
@@ -212,7 +212,7 @@ should be computed.
             # on the one hand;  but on the other hand, we get less frequent parameter updates, which
             # slows down learning.  In this code, we found that making local steps be much
             # smaller than 20 makes the algorithm more difficult to tune and to get to work.
-            self.runner = RunnerThread(MancalaEnv(), pi)
+            self.env_runner = RunnerThread(MancalaEnv(), pi)
 
             episode_size = tf.to_float(tf.shape(pi.value)[0])
 
@@ -256,13 +256,6 @@ and updates the parameters.
 
         batch = generate_training_batch(rollout, gamma=0.99)
 
-        should_compute_summary = self.task == 0 and self.local_steps % sum_period == 0
-
-        if should_compute_summary:
-            fetches = [self.summary_op, self.train_op, self.global_step]
-        else:
-            fetches = [self.train_op, self.global_step]
-
         feed_dict = {
             self.local_network.state: batch.states,
             self.action: batch.actions,
@@ -270,6 +263,13 @@ and updates the parameters.
             self.target_v: batch.discounted_rewards,
             self.local_network.mask: batch.masks,
         }
+
+        should_compute_summary = self.task == 0 and self.local_steps % sum_period == 0
+
+        if should_compute_summary:
+            fetches = [self.train_op, self.global_step, self.summary_op]
+        else:
+            fetches = [self.train_op, self.global_step]
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
 

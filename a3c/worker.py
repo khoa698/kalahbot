@@ -5,8 +5,8 @@ import logging
 import sys, signal
 import time
 import os
-from a3c.a3c import A3C
-from a3c.agent import RandomAgent
+from a3c import A3C
+from agent import RandomAgent
 from env.mancala import MancalaEnv
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
@@ -65,6 +65,41 @@ def run(args, server):
                              global_step=trainer.global_step,
                              save_model_secs=30,
                              save_summaries_secs=30)
+
+    # scaffold = tf.train.Scaffold(init_op=init_op,
+    #                              init_feed_dict=None,
+    #                              init_fn=init_fn,
+    #                              ready_op=tf.report_uninitialized_variables(variables_to_save),
+    #                              ready_for_local_init_op=None,
+    #                              local_init_op=None,
+    #                              summary_op=None,
+    #                              saver=saver,
+    #                              copy_from_scaffold=None
+    #                              )
+    # summary_saver = tf.train.SummarySaverHook(save_steps=None,
+    #                                           save_secs=30,
+    #                                           output_dir=logdir,
+    #                                           summary_writer=summary_writer,
+    #                                           scaffold=None,
+    #                                           summary_op=None)
+    #
+    # sv = tf.train.MonitoredTrainingSession(
+    #                                         master='',
+    #                                         is_chief=(args.task == 0),
+    #                                         checkpoint_dir=logdir,
+    #                                         scaffold=scaffold,
+    #                                         hooks=summary_saver,
+    #                                         chief_only_hooks=None,
+    #                                         save_checkpoint_secs=30,
+    #                                         save_summaries_steps=None,
+    #                                         save_summaries_secs=30,
+    #                                         config=None,
+    #                                         stop_grace_period_secs=120,
+    #                                         log_step_count_steps=trainer.global_step,
+    #                                         max_wait_secs=7200,
+    #                                         save_checkpoint_steps=None,
+    #                                         summary_dir=logdir
+    #                                     )
 
     num_global_steps = 100000000
 

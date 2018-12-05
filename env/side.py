@@ -1,15 +1,18 @@
 from enum import Enum
 
+NORTH_INDEX = 0
+SOUTH_INDEX = 1
+
 
 class Side(Enum):
     NORTH = 0
     SOUTH = 1
 
     @staticmethod
-    def get_side(side) -> int:
+    def get_index(side) -> int:
         if side is side.NORTH:
-            return 0
-        return 1
+            return NORTH_INDEX
+        return SOUTH_INDEX
 
     @classmethod
     def opposite(cls, side):
@@ -18,8 +21,7 @@ class Side(Enum):
         return side.NORTH
 
     @staticmethod
-    def to_string(side) -> str:
+    def side_to_str(side) -> str:
         if side is side.NORTH:
             return "North"
-        else:
-            return "South"
+        return "South"
