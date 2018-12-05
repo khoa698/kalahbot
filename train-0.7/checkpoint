@@ -1,0 +1,6 @@
+model_checkpoint_path: "/tmp/mancala/train/model.ckpt-6414967"
+all_model_checkpoint_paths: "/tmp/mancala/train/model.ckpt-6343832"
+all_model_checkpoint_paths: "/tmp/mancala/train/model.ckpt-6361804"
+all_model_checkpoint_paths: "/tmp/mancala/train/model.ckpt-6380035"
+all_model_checkpoint_paths: "/tmp/mancala/train/model.ckpt-6397486"
+all_model_checkpoint_paths: "/tmp/mancala/train/model.ckpt-6414967"
