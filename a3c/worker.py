@@ -5,8 +5,8 @@ import logging
 import sys, signal
 import time
 import os
-from a3c import A3C
-from agent import RandomAgent
+from a3c.a3c import A3C
+from a3c.agent import RandomAgent
 from env.mancala import MancalaEnv
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')

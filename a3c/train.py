@@ -32,7 +32,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
     # for launching the TF workers and for launching tensorboard
     base_cmd = [
         'CUDA_VISIBLE_DEVICES=',
-        "/usr/bin/python3", './worker.py',
+        "/usr/bin/python3.6", '-m','a3c.worker',
         '--log-dir', logdir,
         '--num-workers', str(num_workers)]
 
@@ -47,7 +47,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
         cmds_map += [new_cmd(session,
             "w-%d" % i, base_cmd + ["--job-name", "worker", "--task", str(i), "--remotes", remotes[i]], mode, logdir, shell)]
 
-    cmds_map += [new_cmd(session, "tb", ["python", "/home/simeone/.local/lib/python3.6/site-packages/tensorboard/main.py", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
+    cmds_map += [new_cmd(session, "tb", ["python3.6", "/home/khoahoang/.local/lib/python3.6/site-packages/tensorboard/main.py", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
     if mode == 'tmux':
         cmds_map += [new_cmd(session, "htop", ["htop"], mode, logdir, shell)]
 

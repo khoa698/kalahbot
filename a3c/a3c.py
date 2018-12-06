@@ -6,8 +6,8 @@ import random
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-from model import ACNetwork
-from agent import Agent
+from a3c.model import ACNetwork
+from a3c.agent import Agent
 import scipy.signal
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
