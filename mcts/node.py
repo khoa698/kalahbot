@@ -18,11 +18,7 @@ class Node:
         return deepcopy(self)
 
     def append_explored_child(self, child):
-
-        if child in self.unexplored_moves:
-            self.explored_children.append(child)
-        else:
-            raise Exception("Invalid child node")
+        self.explored_children.append(child)
 
     def update_node(self, reward: int):
         self.reward += reward
