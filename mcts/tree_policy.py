@@ -12,7 +12,7 @@ class TreePolicy:
             if not len(current_node.explored_children) == 0:
                 return self.expand(current_node)
             else:
-                current_node = utils.select_best_move(current_node)
+                current_node = utils.select_best_child(current_node)
         return current_node
 
     @staticmethod
