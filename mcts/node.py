@@ -21,7 +21,6 @@ class Node:
 
         if child in self.unexplored_moves:
             self.explored_children.append(child)
-            self.unexplored_moves.remove(child)
         else:
             raise Exception("Invalid child node")
 

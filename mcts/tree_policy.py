@@ -19,8 +19,10 @@ class TreePolicy:
     def expand(node: Node)->Node:
         index = randint(0, len(node.unexplored_moves) - 1)
         new_state = MancalaEnv.clone(node.state)
-        new_state.make_move(new_state.board, node.unexplored_moves[index], node.state.side_to_move)
-        new_node = Node(new_state, node, node.unexplored_moves[index])
+        move = node.unexplored_moves[index]
+        node.unexplored_moves.remove(move)
+        new_state.make_move(new_state.board, move, node.state.side_to_move)
+        new_node = Node(new_state, node, move)
         return new_node
 
 

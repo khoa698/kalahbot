@@ -14,6 +14,8 @@ class DefaultPolicy:
             new_state = MancalaEnv.clone(current_node.state)
             new_state.make_move(new_state.board, current_node.unexplored_moves[index],
                                 current_node.state.side_to_move)
-            current_node = Node(new_state, parent_node, current_node.unexplored_moves[index])
+            move = current_node.unexplored_moves[index]
+            current_node.unexplored_moves.remove(index)
+            current_node = Node(new_state, parent_node, move)
             parent_node = current_node
         return current_node
