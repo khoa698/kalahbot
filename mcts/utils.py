@@ -29,6 +29,7 @@ def select_best_child(node: Node) -> Node:
             if max_value < compute_uct(node, child):
                 max_value = max_value
                 best_child = child
+
         return best_child
 
 

@@ -2,6 +2,7 @@ from env.mancala import MancalaEnv
 from env.move import Move
 from copy import deepcopy
 
+
 class Node:
 
     def __init__(self, state: MancalaEnv, parent=None, move: Move = None):
@@ -28,7 +29,7 @@ class Node:
         return len(self.state.get_legal_moves()) == 0
 
     def get_legal_moves(self):
-        return self.get_legal_moves()
+        return self.state.get_legal_moves()
 
     def is_fully_expanded(self) -> bool:
         return len(self.unexplored_moves) == 0
