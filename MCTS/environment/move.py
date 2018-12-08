@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from env.side import Side
+from MCTS.environment.side import Side
 
 
 class Move(object):

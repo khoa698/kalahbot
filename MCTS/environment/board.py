@@ -1,4 +1,4 @@
-from env.side import Side
+from MCTS.environment.side import Side
 from copy import deepcopy
 import numpy as np
 

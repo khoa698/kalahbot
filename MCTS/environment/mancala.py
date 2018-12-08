@@ -3,9 +3,9 @@ from typing import List
 
 import numpy as np
 
-from env.board import Board
-from env.move import Move
-from env.side import Side
+from MCTS.environment.board import Board
+from MCTS.environment.move import Move
+from MCTS.environment.side import Side
 
 
 class MancalaEnv(object):

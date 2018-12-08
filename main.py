@@ -20,10 +20,10 @@ def main(_):
     """with tf.Session() as sess:
         with tf.variable_scope("global"):
             a3client = A3Client(sess)
-            mcts = TreesFactory.alpha_mcts(a3client)
+            agent = TreesFactory.alpha_mcts(a3client)
             state = MancalaEnv()
             try:
-                _run_game(mcts, state)
+                _run_game(agent, state)
             except Exception as e:
                 logging.error("Uncaught exception in main: " + str(e))
                 # TODO uncomment before release: Default to reasonable move behaviour on failure
@@ -50,7 +50,6 @@ def _run_game(mcts, state):
                 first = protocol.interpret_start_msg(msg)
                 if first:
                     node = Node(state)
-
                     move = mcts.find_next_move(node)
 
                     protocol.send_msg(protocol.create_move_msg(move.index))
