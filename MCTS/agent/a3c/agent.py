@@ -1,5 +1,5 @@
 import numpy as np
-from .env.side import Side
+from MCTS.environment.side import Side
 
 
 class Agent(object):

@@ -5,9 +5,9 @@ import logging
 import sys, signal
 import time
 import os
-from a3c.a3c import A3C
-from a3c.agent import RandomAgent
-from env.mancala import MancalaEnv
+from MCTS.agent.a3c.a3c import A3C
+from MCTS.agent.a3c.agent import RandomAgent
+from MCTS.environment.mancala import MancalaEnv
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
 
@@ -46,7 +46,7 @@ def run(args, server):
         ses.run(init_all_op)
 
     config = tf.ConfigProto(device_filters=["/job:ps", "/job:worker/task:{}/cpu:0".format(args.task)])
-    logdir = os.path.join(args.log_dir, 'train')
+    logdir = os.path.join(args.log_dir, 'train_result_a3c')
 
     if use_tf12_api:
         summary_writer = tf.summary.FileWriter(logdir + "_%d" % args.task)
@@ -66,7 +66,7 @@ def run(args, server):
                              save_model_secs=30,
                              save_summaries_secs=30)
 
-    # scaffold = tf.train.Scaffold(init_op=init_op,
+    # scaffold = tf.train_result_a3c.Scaffold(init_op=init_op,
     #                              init_feed_dict=None,
     #                              init_fn=init_fn,
     #                              ready_op=tf.report_uninitialized_variables(variables_to_save),
@@ -76,14 +76,14 @@ def run(args, server):
     #                              saver=saver,
     #                              copy_from_scaffold=None
     #                              )
-    # summary_saver = tf.train.SummarySaverHook(save_steps=None,
+    # summary_saver = tf.train_result_a3c.SummarySaverHook(save_steps=None,
     #                                           save_secs=30,
     #                                           output_dir=logdir,
     #                                           summary_writer=summary_writer,
     #                                           scaffold=None,
     #                                           summary_op=None)
     #
-    # sv = tf.train.MonitoredTrainingSession(
+    # sv = tf.train_result_a3c.MonitoredTrainingSession(
     #                                         master='',
     #                                         is_chief=(args.task == 0),
     #                                         checkpoint_dir=logdir,

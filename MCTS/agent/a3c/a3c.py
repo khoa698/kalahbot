@@ -1,13 +1,13 @@
 from __future__ import print_function
-from env.mancala import MancalaEnv
-from env.side import Side
-from env.move import Move
+from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.side import Side
+from MCTS.environment.move import Move
 import random
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-from a3c.model import ACNetwork
-from a3c.agent import Agent
+from MCTS.agent.a3c.model import ACNetwork
+from MCTS.agent.a3c.agent import Agent
 import scipy.signal
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
@@ -243,7 +243,7 @@ should be computed.
 
     def train(self, sess: tf.Session, rollout: Rollout, sum_period=100):
         """
-train grabs a rollout that's been produced by the thread runner,
+train_result_a3c grabs a rollout that's been produced by the thread runner,
 and updates the parameters.
 """
 
