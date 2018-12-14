@@ -1,5 +1,4 @@
 import datetime
-import multiprocessing
 from multiprocessing import Process, Queue
 from MCTS.environment.kalah import KalahEnvironment
 from MCTS.environment.move import Move
@@ -7,8 +6,6 @@ from MCTS.agent.tree import utilities
 from MCTS.agent.tree.node import Node
 from MCTS.agent.tree.policies import MonteCarloA3CPolicies
 
-import logging
-logging.basicConfig(filename='log.log', level=logging.DEBUG)
 
 class MCTS:
     def __init__(self, run_duration: int, policies: MonteCarloA3CPolicies):
@@ -51,7 +48,5 @@ class MCTS:
             output = output_queue.get()
             options.append(output[0])
             rewards.append(output[1])
-        logging.info(options)
-        logging.info(rewards)
 
         return options[rewards.index(max(rewards))]
