@@ -30,11 +30,15 @@ class MCTS:
         output_queue.put([chosen.move, chosen.reward])
 
     def parrallelized(self, state: KalahEnvironment) -> Move:
+        if len(state.get_valid_moves()) == 1:
+            return state.get_valid_moves()[0]
+
+        root = Node(state=KalahEnvironment.clone(state))
         process_list = []
-        ensemble_count = 8
+        ensemble_count = 24
         output_queue = Queue(ensemble_count)
         for proc in range(ensemble_count):
-            worker_proc = Process(target=self.find_next_move, args=(state, output_queue))
+            worker_proc = Process(target=self.find_next_move, args=(root.state, output_queue))
             worker_proc.daemon = True
             process_list.append(worker_proc)
             worker_proc.start()
