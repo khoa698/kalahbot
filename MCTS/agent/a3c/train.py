@@ -32,7 +32,7 @@ def create_commands(session, num_workers, remotes, logdir, shell='bash', mode='t
     # for launching the TF workers and for launching tensorboard
     base_cmd = [
         'CUDA_VISIBLE_DEVICES=',
-        "/usr/bin/python3.6", '-m','a3c.worker',
+        "/usr/bin/python3.6", '-m','MCTS.agent.a3c.worker',
         '--log-dir', logdir,
         '--num-workers', str(num_workers)]
 

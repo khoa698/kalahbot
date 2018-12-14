@@ -101,19 +101,8 @@ class MancalaEnv(object):
     def is_game_over(self) -> bool:
         return MancalaEnv.game_over(self.board)
 
-    def get_actions_mask(self) -> [float]:
-        """Returns an np array of 1s and 0s where 1 at index i means that the action with that action is valid. """
-        mask = [0 for _ in range(self.board.holes + 1)]
-        moves = self.get_legal_moves()
-        for action in moves:
-            mask[action.index] = 1
-        return np.array(mask)
 
     def get_action_mask_with_no_pie(self) -> [float]:
-        """
-        Returns an np array of 1s and 0s where 1 at index i means that the action with that action is valid.
-        The pie move is not considered.
-        """
         mask = [0 for _ in range(self.board.holes)]
         moves = [move.index for move in self.get_legal_moves()]
         if 0 in moves:
@@ -123,9 +112,6 @@ class MancalaEnv(object):
         return np.array(mask)
 
     def get_winner(self) -> Side or None:
-        """
-        :return: The winning Side of the game or none if there is a tie.
-        """
         if not self.is_game_over():
             raise ValueError('This method should be called only when the game is over')
         finished_side = Side.NORTH if MancalaEnv.holes_empty(self.board, Side.NORTH) else Side.SOUTH
@@ -142,7 +128,6 @@ class MancalaEnv(object):
             return not_finished_side
         return None
 
-    # Generate a list of all legal moves given a board state and a side
     @staticmethod
     def get_state_legal_actions(board: Board, side: Side, north_moved: bool) -> List[Move]:
         # If this is the first move of NORTH, then NORTH can use the pie rule action
@@ -165,10 +150,6 @@ class MancalaEnv(object):
 
     @staticmethod
     def game_over(board: Board):
-        """
-        :param board: The board to be analysed
-        :return: True if the game is over and the side which finished
-        """
         if MancalaEnv.holes_empty(board, Side.SOUTH):
             return True
         if MancalaEnv.holes_empty(board, Side.NORTH):
@@ -183,10 +164,8 @@ class MancalaEnv(object):
     @staticmethod
     def make_move(board: Board, move: Move, north_moved):
         if not MancalaEnv.is_legal_action(board, move, north_moved):
-            raise ValueError('Move is illegal: Board: \n {} \n Move:\n {}/{} \n {}'.format(board, move.index, move.side,
-                                                                                           north_moved))
+            raise Exception('Move is illegal')
 
-        # This is a pie move
         if move.index == 0:
             MancalaEnv.switch_sides(board)
             return Side.opposite(move.side)
@@ -195,11 +174,8 @@ class MancalaEnv(object):
         board.set_seeds(move.side, move.index, 0)
 
         holes = board.holes
-        # Place seeds in all holes excepting the opponent's store
         receiving_holes = 2 * holes + 1
-        # Rounds needed to sow all the seeds
         rounds = seeds_to_sow // receiving_holes
-        # Seeds remaining after all the rounds
         remaining_seeds = seeds_to_sow % receiving_holes
 
         # Sow the seeds for the full rounds

@@ -42,7 +42,9 @@ class ACNetwork(object):
         """Renormalises the logits by taking into account only the valid actions and generates a sample"""
         dist, logits, value = self.evaluate_move(mask, state)
 
-        return np.random.choice(range(logits.size), p=dist), value[0][0]
+        value = tf.squeeze(tf.multinomial(logits - tf.reduce_max(logits, [1], keep_dims=True), 1), [1])
+        move_index = tf.one_hot(value, dist)
+        return np.argmax(move_index), value[0][0]
 
     def evaluate_move(self, mask, state):
         sess = tf.get_default_session()

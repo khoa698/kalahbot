@@ -1,15 +1,11 @@
 from MCTS.agent.mcts import MCTS
-from MCTS.agent.tree.policies import MonteCarloA3CPolicies
-from MCTS.agent.a3c.a3client import A3Client
 import MCTS.protocol.protocol as protocol
+from MCTS.agent.tree.policies import MonteCarloA3CPolicies
 from MCTS.environment.move import Move
 from MCTS.protocol.msg_type import MsgType
 from MCTS.environment.mancala import MancalaEnv
 from MCTS.environment.side import Side
-import tensorflow as tf
 
-# import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def run(mcts, state):
     while True:
@@ -38,13 +34,10 @@ def run(mcts, state):
 
 
 def main():
-    with tf.Session(config=tf.ConfigProto(
-            intra_op_parallelism_threads=12)) as sess:
-        with tf.variable_scope("global"):
-            a3c_network = A3Client(sess)
-            mcts = MCTS(run_duration=20, policies=MonteCarloA3CPolicies(a3c_network=a3c_network))
-            state = MancalaEnv()
-            run(mcts, state)
+    policies = MonteCarloA3CPolicies()
+    mcts = MCTS(run_duration=20, policies=policies)
+    state = MancalaEnv()
+    run(mcts, state)
 
 
 if __name__ == '__main__':

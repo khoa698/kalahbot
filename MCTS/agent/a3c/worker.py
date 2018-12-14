@@ -46,7 +46,7 @@ def run(args, server):
         ses.run(init_all_op)
 
     config = tf.ConfigProto(device_filters=["/job:ps", "/job:worker/task:{}/cpu:0".format(args.task)])
-    logdir = os.path.join(args.log_dir, 'train_result_a3c')
+    logdir = os.path.join(args.log_dir, 'train_result_a3c_final')
 
     if use_tf12_api:
         summary_writer = tf.summary.FileWriter(logdir + "_%d" % args.task)
@@ -101,12 +101,14 @@ def run(args, server):
     #                                         summary_dir=logdir
     #                                     )
 
-    num_global_steps = 100000000
+    num_global_steps = 400000000
 
     logger.info(
         "Starting session. If this hangs, we're mostly likely waiting to connect to the parameter server. " +
         "One common cause is that the parameter server DNS name isn't resolving yet, or is misspecified.")
     with sv.managed_session(server.target, config=config) as sess, sess.as_default():
+        checkpoint_path = tf.train.get_checkpoint_state(checkpoint_dir="tmp/logs-2/train")
+        saver.restore(sess=sess,  save_path=checkpoint_path.model_checkpoint_path)
         sess.run(trainer.down_sync)
         global_step = sess.run(trainer.global_step)
         logger.info("Starting training at step=%d", global_step)

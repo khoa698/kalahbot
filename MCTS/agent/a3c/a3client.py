@@ -15,7 +15,7 @@ class A3Client(object):
     def _restore_model(self):
         saver = FastSaver()
         try:
-            checkpoint_path = tf.train.get_checkpoint_state(checkpoint_dir="MCTS/train_result_a3c")
+            checkpoint_path = tf.train.get_checkpoint_state(checkpoint_dir="MCTS/train")
             saver.restore(sess=self.sess, save_path=checkpoint_path.model_checkpoint_path)
         except Exception as e:
             print(traceback.print_exc())
