@@ -14,7 +14,7 @@ def run(mcts, state):
         if msg_type == MsgType.START:
             first = protocol.interpret_start_msg(msg)
             if first:
-                move = mcts.find_next_move(state)
+                move = mcts.parrallelized(state)
                 protocol.send_msg(protocol.create_move_msg(move.index))
             else:
                 state.my_side = Side.NORTH
@@ -23,7 +23,7 @@ def run(mcts, state):
             state.do_move(Move(state.side_to_play, move_turn.move))
             if not move_turn.end:
                 if move_turn.again:
-                    move = mcts.find_next_move(state)
+                    move = mcts.parrallelized(state)
                     if move.index == 0:
                         protocol.send_msg(protocol.create_swap_msg())
                     else:
