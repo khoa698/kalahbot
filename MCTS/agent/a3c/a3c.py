@@ -1,5 +1,5 @@
 from __future__ import print_function
-from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.kalah import KalahEnvironment
 from MCTS.environment.side import Side
 from MCTS.environment.move import Move
 import random
@@ -74,7 +74,7 @@ is that a universe environment is _real time_.  This means that there should be 
 that would constantly interact with the environment and tell it what to do.  This thread is here.
 """
 
-    def __init__(self, env: MancalaEnv, ac_net: ACNetwork):
+    def __init__(self, env: KalahEnvironment, ac_net: ACNetwork):
         self.env = env
         self.ac_net = ac_net
         self.sess = None
@@ -107,34 +107,34 @@ runner appends the policy to the queue.
 """
     rollout = Rollout()
 
-    while not env.is_game_over():
+    while not env.has_game_ended():
         # There is no choice if only one action is left. Taking that action automatically must be seen as
         # a characteristic behaviour of the environment. This helped the learning of the agent
         # to be more numerically stable (this is an empirical observation).
-        if len(env.get_legal_moves()) == 1:
-            action_left_to_perform = env.get_legal_moves()[0]
-            env.perform_move(action_left_to_perform)
+        if len(env.get_valid_moves()) == 1:
+            action_left_to_perform = env.get_valid_moves()[0]
+            env.do_move(action_left_to_perform)
             continue
 
-        if env.side_to_move == trainer_side:
+        if env.side_to_play == trainer_side:
             # If the agent is playing as NORTH, it's input would be a flipped board
-            flip_board = env.side_to_move == Side.NORTH
+            flip_board = env.side_to_play == Side.NORTH
             state = env.board.get_board_image(flipped=flip_board)
-            mask = env.get_action_mask_with_no_pie()
+            mask = env.get_mask()
 
             action, value = ac_net.sample(state, mask)
             # Because the pie move with index 0 is ignored, the action indexes must be shifted by one
-            reward = env.perform_move(Move(trainer_side, action + 1))
+            reward = env.do_move(Move(trainer_side, action + 1))
             rollout.add(state, action, reward, value, mask)
         else:
-            assert env.side_to_move == Side.opposite(trainer_side)
+            assert env.side_to_play == Side.opposite(trainer_side)
             action = opp_agent.produce_action(env.board.get_board_image(),
-                                                   env.get_action_mask_with_no_pie(),
-                                                   env.side_to_move)
-            env.perform_move(Move(env.side_to_move, action + 1))
+                                              env.get_mask(),
+                                              env.side_to_play)
+            env.do_move(Move(env.side_to_play, action + 1))
 
         # We replace the partial reward of the last move with the final reward of the game
-    final_reward = env.compute_final_reward(trainer_side)
+    final_reward = env.calculate_score_diff(trainer_side)
     rollout.update_last_reward(final_reward)
 
     if env.get_winner() == trainer_side:
@@ -212,7 +212,7 @@ should be computed.
             # on the one hand;  but on the other hand, we get less frequent parameter updates, which
             # slows down learning.  In this code, we found that making local steps be much
             # smaller than 20 makes the algorithm more difficult to tune and to get to work.
-            self.env_runner = RunnerThread(MancalaEnv(), pi)
+            self.env_runner = RunnerThread(KalahEnvironment(), pi)
 
             episode_size = tf.to_float(tf.shape(pi.value)[0])
 

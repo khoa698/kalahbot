@@ -7,7 +7,7 @@ import time
 import os
 from MCTS.agent.a3c.a3c import A3C
 from MCTS.agent.a3c.agent import RandomAgent
-from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.kalah import KalahEnvironment
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
 
@@ -22,7 +22,7 @@ class FastSaver(tf.train.Saver):
                                     meta_graph_suffix, False)
 
 def run(args, server):
-    env = MancalaEnv()
+    env = KalahEnvironment()
     trainer = A3C(env, args.task)
 
     # Variable names that start with "local" are not saved in checkpoints.

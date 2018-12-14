@@ -1,7 +1,7 @@
 import tensorflow as tf
 from MCTS.agent.a3c.utils import FastSaver
 from MCTS.environment.side import Side
-from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.kalah import KalahEnvironment
 from MCTS.agent.a3c.model import ACNetwork
 import traceback
 
@@ -20,16 +20,16 @@ class A3Client(object):
         except Exception as e:
             print(traceback.print_exc())
 
-    def sample(self, env: MancalaEnv) -> (int, float):
-        flip_board = env.side_to_move == Side.NORTH
+    def sample(self, env: KalahEnvironment) -> (int, float):
+        flip_board = env.side_to_play == Side.NORTH
         state = env.board.get_board_image(flipped=flip_board)
-        mask = env.get_action_mask_with_no_pie()
+        mask = env.get_mask()
         return self.network.sample(state=state, mask=mask)
 
-    def evaluate(self, env: MancalaEnv) -> (float, float):
-        flip_board = env.side_to_move == Side.NORTH
+    def evaluate(self, env: KalahEnvironment) -> (float, float):
+        flip_board = env.side_to_play == Side.NORTH
         state = env.board.get_board_image(flipped=flip_board)
-        mask = env.get_action_mask_with_no_pie()
+        mask = env.get_mask()
         dist, _, value = self.network.evaluate_move(state=state, mask=mask)
 
         return dist, float(value)

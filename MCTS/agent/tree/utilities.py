@@ -1,7 +1,7 @@
 from MCTS.agent.tree.node import Node
 from math import log, sqrt
 
-from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.kalah import KalahEnvironment
 from MCTS.environment.side import Side
 
 
@@ -18,7 +18,7 @@ def select_child(node: Node) -> Node:
     return max(node.children, key=lambda child: uct(node, child))
 
 
-def h1(state: MancalaEnv, parent_side: Side) -> int:
+def h1(state: KalahEnvironment, parent_side: Side) -> int:
     my_mancala = state.board.get_seeds_in_store(parent_side)
     opponent_mancala = state.board.get_seeds_in_store(Side.opposite(parent_side))
 

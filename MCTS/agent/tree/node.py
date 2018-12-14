@@ -1,14 +1,14 @@
 from copy import deepcopy
-from MCTS.environment.mancala import MancalaEnv
+from MCTS.environment.kalah import KalahEnvironment
 from MCTS.environment.move import Move
 
 
 class Node:
-    def __init__(self, state: MancalaEnv, move: Move = None, parent=None):
+    def __init__(self, state: KalahEnvironment, move: Move = None, parent=None):
         self.parent = parent
         self.state = state
         self.children = []
-        self.unexplored_moves = set(state.get_legal_moves())
+        self.unexplored_moves = set(state.get_valid_moves())
         self.visits = 0
         self.reward = 0
         self.move = move
@@ -26,7 +26,7 @@ class Node:
         self.unexplored_moves.remove(child.move)
 
     def is_leaf_node(self) -> bool:
-        return len(self.state.get_legal_moves()) == 0
+        return len(self.state.get_valid_moves()) == 0
 
     def is_explored(self) -> bool:
         return len(self.unexplored_moves) == 0
